@@ -1,0 +1,2 @@
+define_plugin sky-int-demo
+# plugin_requires foo bar
