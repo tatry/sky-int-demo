@@ -14,8 +14,7 @@ function init_sky_int_demo
 
 function configure_sky_int_demo
 {
-	# empty
-	:
+	run_process sky-int-demo-collector "$SKY_INT_DEMO_COLLECTOR_DIR/server.py"
 }
 
 if [[ "$1" == "stack" && "$2" == "pre-install" ]]; then
@@ -54,8 +53,9 @@ elif [[ "$1" == "stack" && "$2" == "extra" ]]; then
 fi
 
 if [[ "$1" == "unstack" ]]; then
-	# Shut down template services
-	# no-op
+	# Shut down services
+	stop_process sky-int-demo-collector
+
 	sudo /bin/systemctl stop grafana-server.service
 fi
 
