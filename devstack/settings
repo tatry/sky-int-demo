@@ -1,2 +1,18 @@
 define_plugin sky-int-demo
-# plugin_requires foo bar
+
+# sky-int-demo-collector - service collects INT metadata from node (must be enebled)
+# sky-int-demo-grafana - service to present collected data from node (optional)
+enable_service sky-int-demo-grafana sky-int-demo-collector
+
+SKY_INT_DEMO_DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && cd .. && pwd )
+SKY_INT_DEMO_COLLECTOR_DIR=$SKY_INT_DEMO_DIR/collector
+
+# Database for the INT collector
+SKY_INT_DEMO_INFLUX_IP=${SKY_INT_DEMO_INFLUX_PORT:-"127.0.0.1"}
+SKY_INT_DEMO_INFLUX_PORT=${SKY_INT_DEMO_INFLUX_PORT:-8086}
+
+# Configure INT collector
+SKY_INT_DEMO_INT_CORES=${SKY_INT_DEMO_INT_CORES:-2}
+
+# Configure Grafana
+SKY_INT_DEMO_GRAFANA_VER=${SKY_INT_DEMO_GRAFANA_VER:-"7.0.3_amd64"}

@@ -18,7 +18,17 @@ function configure_sky_int_demo
 if [[ "$1" == "stack" && "$2" == "pre-install" ]]; then
 	# Set up system services
 	echo_summary "Configuring system services sky-int-demo"
-	#install_package cowsay
+	install_package python3-influxdb
+	if is_service_enabled sky-int-demo-grafana; then
+		# InfluxDB
+		install_package influxdb
+		# Grafana
+		if ! is_package_installed grafana; then
+			wget "https://dl.grafana.com/oss/release/grafana_${SKY_INT_DEMO_GRAFANA_VER}.deb"
+			install_package "./grafana_${SKY_INT_DEMO_GRAFANA_VER}.deb"
+			rm "./grafana_${SKY_INT_DEMO_GRAFANA_VER}.deb"
+		fi
+	fi
 
 elif [[ "$1" == "stack" && "$2" == "install" ]]; then
 	# Perform installation of service source
@@ -45,6 +55,5 @@ fi
 if [[ "$1" == "clean" ]]; then
 	# Remove state and transient data
 	# Remember clean.sh first calls unstack.sh
-	# no-op
-	:
+	sudo apt-get purge grafana influxdb
 fi
