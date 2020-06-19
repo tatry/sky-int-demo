@@ -3,16 +3,19 @@
 function install_sky_int_demo
 {
 	# empty
+	:
 }
 
 function init_sky_int_demo
 {
 	# empty
+	:
 }
 
 function configure_sky_int_demo
 {
 	# empty
+	:
 }
 
 if [[ "$1" == "stack" && "$2" == "pre-install" ]]; then
