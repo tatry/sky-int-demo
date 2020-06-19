@@ -27,9 +27,13 @@ if [[ "$1" == "stack" && "$2" == "pre-install" ]]; then
 		install_package influxdb
 		# Grafana
 		if ! is_package_installed grafana; then
-			wget "https://dl.grafana.com/oss/release/grafana_""${SKY_INT_DEMO_GRAFANA_VER}"".deb"
+			wget -q "https://dl.grafana.com/oss/release/grafana_""${SKY_INT_DEMO_GRAFANA_VER}"".deb"
 			install_package ./"grafana_""${SKY_INT_DEMO_GRAFANA_VER}"".deb"
 			rm "./grafana_""${SKY_INT_DEMO_GRAFANA_VER}"".deb"
+			
+			sudo /bin/systemctl daemon-reload
+			sudo /bin/systemctl enable grafana-server.service
+			sudo /bin/systemctl start grafana-server.service
 		fi
 	fi
 
@@ -52,7 +56,7 @@ fi
 if [[ "$1" == "unstack" ]]; then
 	# Shut down template services
 	# no-op
-	:
+	sudo /bin/systemctl stop grafana-server.service
 fi
 
 if [[ "$1" == "clean" ]]; then
