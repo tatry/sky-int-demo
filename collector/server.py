@@ -62,15 +62,17 @@ def server(result):
 				#print("{} recv: ".format(os.getpid()), data)
 			
 				# decode packet and send to DB
-				#parser.parse_int_report(data)
-				#latency = parser.parse_int_report_fast_latency_one_hop(data)
-				latency = parser.parse_int_report_fast_latency_two_hop(data)
-				state.totalDelay += latency
-				if latency < state.minDelay:
-					state.minDelay = latency
-				if latency > state.maxDelay:
-					state.maxDelay = latency
-				state.pkts += 1
+				hops_metadata, transport_protocol, srcIP, dstIP, srcPort, dstPort, packet_totalLen = parser.parse_int_report(data)
+
+				if len(hops_metadata) == 0:
+					continue
+
+				flow = "{}, {}, {}, {}, {}".format(transport_protocol, srcIP, srcPort, dstIP, dstPort)
+
+				print("flow: {}:".format(flow))
+				print(" bytes: {}".format(packet_totalLen))
+				for i in hops_metadata:
+					print(" {}".format(i))
 			
 			except SendMetadata:
 				# one packet may be incompletly added, so the more packets, the error is smaller
@@ -129,7 +131,7 @@ if __name__ == '__main__':
 			final_result = ServerState()
 			for v in results:
 				c = v.get()
-				print("pkts: {}, delay min/max/total: {}/{}/{}".format(c.pkts, c.minDelay, c.maxDelay, c.totalDelay))
+				#print("pkts: {}, delay min/max/total: {}/{}/{}".format(c.pkts, c.minDelay, c.maxDelay, c.totalDelay))
 				final_result.pkts += c.pkts
 				final_result.totalDelay += c.totalDelay
 				if c.minDelay < final_result.minDelay:

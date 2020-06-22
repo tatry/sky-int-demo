@@ -91,61 +91,78 @@ def parse_int_report(data):
 
 	ip_version = get_ip_version(ip_header)
 
+	# Decode flow
+
 	srcIP = ''
 	dstIP = ''
+	packet_totalLen = 0
 	if ip_version == 4:
 		srcIP = socket.inet_ntop(socket.AF_INET, get_header_data(ip_header, 12, 4))
 		dstIP = socket.inet_ntop(socket.AF_INET, get_header_data(ip_header, 16, 4))
+		packet_totalLen = get_int_word(ip_header, 2)
 	else:
 		raise ParserError('IPv{} not supported by report parser'.format(ip_version))
 
-	srcPort = get_transport_port(get_header_data(data, 0, 2))
-	dstPort = get_transport_port(get_header_data(data, 2, 2))
+	srcPort = get_transport_port(get_header_data(transport_header, 0, 2))
+	dstPort = get_transport_port(get_header_data(transport_header, 2, 2))
 
-	print('Flow: {}:{} -> {}:{}'.format(srcIP, srcPort, dstIP, dstPort))
+	transport_protocol = ''
+	if len(transport_header) == 20:
+		transport_protocol = 'tcp'
+	else:
+		transport_protocol = 'udp'
 
-	# TODO: decode remaining important fields
+	# Decode INT
 
 	hop_ml = get_int_per_hop_metadata_size(int_header)
-	print('Hop ML: {}'.format(hop_ml))
-	if hop_ml == 0 or hop_ml > 10:
-		raise ParserError('Invalid per hop metadata len')
+	if hop_ml != 10:
+		raise ParserError('Invalid per hop metadata len. This demo assume that all metadata are collected')
 	if len(int_metadata) % hop_ml != 0:
 		raise ParserError('Invalid metadata len')
-
-	instruction_set = get_int_instruction_set(int_header)
 
 	hops_metadata = []
 	metadata_set_offset = 0
 	while metadata_set_offset < len(int_metadata):
-		metadata_set = get_header_data(int_metadata, metadata_set_offset * 4, hop_ml * 4)
-		metadata_set_offset += hop_ml
+		metadata_set = get_header_data(int_metadata, metadata_set_offset, hop_ml * 4)
+		metadata_set_offset += 4 * hop_ml
 
 		metadata = {}
 		offset = 0
 
-		if instruction_set & (1 << 0):
-			metadata[0] = get_int_dword(metadata_set, offset)
-			offset = offset + 4
-		else:
-			metadata[0] = None
+		# switch ID
+		metadata["switch_ID"] = get_int_dword(metadata_set, offset)
+		offset = offset + 4
 		
-		# TODO: other metadata
+		# ingress and egress port
+		metadata["ingress_port"] = get_int_word(metadata_set, offset)
+		offset = offset + 2
+		metadata["egress_port"] = get_int_word(metadata_set, offset)
+		offset = offset + 2
+
+		# hop latency
+		metadata["latency"] = get_int_dword(metadata_set, offset)
+		offset = offset + 4
+
+		# queue
+		#offset = offset + 4
+
+		# ingress timestamp
+		#offset = offset + 4
+
+		# egress timestamp
+		#offset = offset + 4
+
+		# logical input and output port
+		#offset = offset + 4
+		#offset = offset + 4
+
+		# tx port utilization
+		#offset = offset + 4
+
+		# checksum complement
+		#offset = offset + 4
 
 		hops_metadata.append(metadata)
 	
-	return hops_metadata, srcIP, dstIP, srcPort, dstPort
+	return hops_metadata, transport_protocol, srcIP, dstIP, srcPort, dstPort, packet_totalLen
 
-def parse_int_report_fast_latency_one_hop(data):
-	int_shim_header, int_header, int_metadata, ip_header, transport_header = split_int_report(data)
-
-	return get_int_dword(int_metadata, 8)
-
-def parse_int_report_fast_latency_two_hop(data):
-	int_shim_header, int_header, int_metadata, ip_header, transport_header = split_int_report(data)
-
-	hop_ml = 4 * get_int_per_hop_metadata_size(int_header)
-	h1 = get_int_dword(int_metadata, 8)
-	h2 = get_int_dword(int_metadata, hop_ml + 8)
-
-	return h1 + h2
