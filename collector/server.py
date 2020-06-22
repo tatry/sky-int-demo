@@ -21,11 +21,29 @@ class ServerState:
 		self.clear()
 	
 	def clear(self):
-		self.pkts = 0
-		self.totalDelay = 0
-		self.minDelay = sys.maxsize
-		self.maxDelay = 0
+		self.flows = dict()
+		self.switches = dict()
+		self.paths = dict()
+	
+	def update_flow(self, flow, bytes, packets, minLatency, maxLatency, totalLatency):
+		if flow in self.flows:
+			self.flows[flow][0] += bytes
+			self.flows[flow][1] += packets
 
+			if self.flows[flow][2] > minLatency:
+				self.flows[flow][2] = minLatency
+			
+			if self.flows[flow][3] < maxLatency:
+				self.flows[flow][3] = maxLatency
+			
+			self.flows[flow][4] += totalLatency
+		else:
+			self.flows[flow] = [bytes, packets, totalLatency, totalLatency, totalLatency] # pkts, bytes, min/max/total latency
+	
+	def add(self, additional):
+		# update flows
+		for k, v in additional.flows.items():
+			self.update_flow(k, v[0], v[1], v[2], v[3], v[4])
 
 state = ServerState()
 
@@ -59,24 +77,32 @@ def server(result):
 			try:
 				data, addr = sock.recvfrom(1500)
 				#print('received {} bytes from {}'.format(len(data), addr))
-				#print("{} recv: ".format(os.getpid()), data)
 			
-				# decode packet and send to DB
+				# decode packet
 				hops_metadata, transport_protocol, srcIP, dstIP, srcPort, dstPort, packet_totalLen = parser.parse_int_report(data)
 
 				if len(hops_metadata) == 0:
 					continue
 
-				flow = "{}, {}, {}, {}, {}".format(transport_protocol, srcIP, srcPort, dstIP, dstPort)
+				flow = "{} {} {} {} {}".format(transport_protocol, srcIP, srcPort, dstIP, dstPort)
 
-				print("flow: {}:".format(flow))
-				print(" bytes: {}".format(packet_totalLen))
+				#print("flow: {}:".format(flow))
+				#print(" bytes: {}".format(packet_totalLen))
+				#for i in hops_metadata:
+				#	print(" {}".format(i))
+				totalLatency = 0
 				for i in hops_metadata:
-					print(" {}".format(i))
+					totalLatency += i["latency"]
+				state.update_flow(flow, packet_totalLen, 1, totalLatency, totalLatency, totalLatency)
 			
 			except SendMetadata:
 				# one packet may be incompletly added, so the more packets, the error is smaller
-				result.put_nowait(state)
+				# dictionaries must be copied to be sure that they are correctly serialized, because
+				# serialization is performed by concurent thread
+				# see https://stackoverflow.com/questions/28593103 
+				tmp = ServerState()
+				tmp.flows = state.flows.copy()
+				result.put_nowait(tmp)
 				state.clear()
 
 			except parser.ParserError as e:
@@ -131,17 +157,9 @@ if __name__ == '__main__':
 			final_result = ServerState()
 			for v in results:
 				c = v.get()
-				#print("pkts: {}, delay min/max/total: {}/{}/{}".format(c.pkts, c.minDelay, c.maxDelay, c.totalDelay))
-				final_result.pkts += c.pkts
-				final_result.totalDelay += c.totalDelay
-				if c.minDelay < final_result.minDelay:
-					final_result.minDelay = c.minDelay
-				if c.maxDelay > final_result.maxDelay:
-					final_result.maxDelay = c.maxDelay
-
-			if final_result.pkts != 0:
-				print("pkts: {}, delay min/max/avg: {}/{}/{}".format(final_result.pkts, final_result.minDelay, final_result.maxDelay,
-					final_result.totalDelay / final_result.pkts))
+				final_result.add(c)
+			
+			# TODO: send final_result to the InfluxDB
 		
 	except KeyboardInterrupt:
 		pass
