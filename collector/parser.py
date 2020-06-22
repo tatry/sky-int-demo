@@ -3,9 +3,12 @@
 import struct
 import socket
 
+class ParserError(Exception):
+	pass
+
 def get_header_data(data, offset, size):
 	if (offset + size > len(data)):
-		raise Exception('Too short packet')
+		raise ParserError('Too short packet')
 	return data[offset:offset+size]
 
 def get_ip_version(data):
@@ -43,7 +46,7 @@ def split_int_report(data):
 	elif ip_version == 6:
 		header_size = 40
 	else:
-		raise Exception('Unknown IP version: {}'.format(ip_version))
+		raise ParserError('Unknown IP version: {}'.format(ip_version))
 
 	ip_header = get_header_data(data, offset, header_size)
 	offset += header_size
@@ -63,7 +66,7 @@ def split_int_report(data):
 		transport_header = get_header_data(data, offset, header_size)
 		offset += header_size
 	else:
-		raise Exception('Unknown transport layer protocol')
+		raise ParserError('Unknown transport layer protocol')
 
 	# INT shim
 	header_size = 4
@@ -78,7 +81,7 @@ def split_int_report(data):
 	# Metadata
 	header_size = 4 * (get_header_data(int_shim_header, 2, 1)[0] - 3)
 	if header_size < 0:
-		raise Exception('Invalid INT length')
+		raise ParserError('Invalid INT length')
 	int_metadata = get_header_data(data, offset, header_size)
 
 	return int_shim_header, int_header, int_metadata, ip_header, transport_header
@@ -94,7 +97,7 @@ def parse_int_report(data):
 		srcIP = socket.inet_ntop(socket.AF_INET, get_header_data(ip_header, 12, 4))
 		dstIP = socket.inet_ntop(socket.AF_INET, get_header_data(ip_header, 16, 4))
 	else:
-		raise Exception('IPv{} not supported by report parser'.format(ip_version))
+		raise ParserError('IPv{} not supported by report parser'.format(ip_version))
 
 	srcPort = get_transport_port(get_header_data(data, 0, 2))
 	dstPort = get_transport_port(get_header_data(data, 2, 2))
@@ -106,9 +109,9 @@ def parse_int_report(data):
 	hop_ml = get_int_per_hop_metadata_size(int_header)
 	print('Hop ML: {}'.format(hop_ml))
 	if hop_ml == 0 or hop_ml > 10:
-		raise Exception('Invalid per hop metadata len')
+		raise ParserError('Invalid per hop metadata len')
 	if len(int_metadata) % hop_ml != 0:
-		raise Exception('Invalid metadata len')
+		raise ParserError('Invalid metadata len')
 
 	instruction_set = get_int_instruction_set(int_header)
 

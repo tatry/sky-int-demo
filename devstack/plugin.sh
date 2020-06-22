@@ -55,6 +55,10 @@ fi
 if [[ "$1" == "unstack" ]]; then
 	# Shut down services
 	stop_process sky-int-demo-collector
+	# Check if all child collectors (workers) are down, if not kill them all
+	if [ "`lsof -ti udp:9500`" != "" ]; then
+		lsof -ti udp:9500 | xargs kill 
+	fi
 
 	sudo /bin/systemctl stop grafana-server.service
 fi

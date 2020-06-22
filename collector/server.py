@@ -10,26 +10,32 @@ import time
 
 import parser
 
+class ShutDownServer(Exception):
+	pass
+
+class SendMetadata(Exception):
+	pass
+
 class ServerState:
 	def __init__(self):
+		self.clear()
+	
+	def clear(self):
 		self.pkts = 0
 		self.totalDelay = 0
 		self.minDelay = sys.maxsize
 		self.maxDelay = 0
 
+
 state = ServerState()
 
 def stopServer(signum, frame):
-	global state
-	state.timeToFinish = True
 	if signum == signal.SIGINT:
-		raise KeyboardInterrupt
+		raise SendMetadata
 	if signum == signal.SIGTERM:
-		raise KeyboardInterrupt
+		raise ShutDownServer
 
 def init_server():
-	global state
-	state.timeToFinish = False
 	os.setpgid(0, 0)
 	signal.signal(signal.SIGINT, stopServer)
 	signal.signal(signal.SIGTERM, stopServer)
@@ -49,12 +55,12 @@ def server(result):
 	result.put_nowait((os.getpid(), True))
 
 	try:
-		while not state.timeToFinish:
-			data, addr = sock.recvfrom(1500)
-			#print('received {} bytes from {}'.format(len(data), addr))
-			#print("{} recv: ".format(os.getpid()), data)
-			
+		while True:
 			try:
+				data, addr = sock.recvfrom(1500)
+				#print('received {} bytes from {}'.format(len(data), addr))
+				#print("{} recv: ".format(os.getpid()), data)
+			
 				# decode packet and send to DB
 				#parser.parse_int_report(data)
 				#latency = parser.parse_int_report_fast_latency_one_hop(data)
@@ -65,21 +71,33 @@ def server(result):
 				if latency > state.maxDelay:
 					state.maxDelay = latency
 				state.pkts += 1
+			
+			except SendMetadata:
+				# one packet may be incompletly added, so the more packets, the error is smaller
+				result.put_nowait(state)
+				state.clear()
 
-			except Exception as e:
+			except parser.ParserError as e:
 				pass
 				#print("Received invalid packet: {}".format(e))
 
-	except KeyboardInterrupt:
+	except ShutDownServer:
 		pass
 
 	finally:
 		sock.close()
-	
-	result.put_nowait(state)
+
+def stopManager(signum, frame):
+	if signum == signal.SIGINT:
+		raise KeyboardInterrupt
+	if signum == signal.SIGTERM:
+		raise KeyboardInterrupt
 
 if __name__ == '__main__':
-	max_processes = len(os.sched_getaffinity(0))
+	signal.signal(signal.SIGINT, stopManager)
+	signal.signal(signal.SIGTERM, stopManager)
+
+	max_processes = 2 #len(os.sched_getaffinity(0))
 	processes = list()
 	results = list()
 	
@@ -98,29 +116,39 @@ if __name__ == '__main__':
 			print("Worker {} not started in the given time".format(p.pid))
 			# TODO: remove process and queue from list
 
+	print("Startup completed")
+	
 	try:
-		print("Started...")
-		signal.pause()
+		while True:
+			# wait a while
+			time.sleep(1)
+
+			for v in processes:
+				os.kill(v.pid, signal.SIGINT)
+			
+			final_result = ServerState()
+			for v in results:
+				c = v.get()
+				print("pkts: {}, delay min/max/total: {}/{}/{}".format(c.pkts, c.minDelay, c.maxDelay, c.totalDelay))
+				final_result.pkts += c.pkts
+				final_result.totalDelay += c.totalDelay
+				if c.minDelay < final_result.minDelay:
+					final_result.minDelay = c.minDelay
+				if c.maxDelay > final_result.maxDelay:
+					final_result.maxDelay = c.maxDelay
+
+			if final_result.pkts != 0:
+				print("pkts: {}, delay min/max/avg: {}/{}/{}".format(final_result.pkts, final_result.minDelay, final_result.maxDelay,
+					final_result.totalDelay / final_result.pkts))
+		
 	except KeyboardInterrupt:
 		pass
-	
-	for v in processes:
-		os.kill(v.pid, signal.SIGINT)
-	
-	final_result = ServerState()
-	for v in results:
-		c = v.get()
-		print("pkts: {}, delay min/max/total: {}/{}/{}".format(c.pkts, c.minDelay, c.maxDelay, c.totalDelay))
-		final_result.pkts += c.pkts
-		final_result.totalDelay += c.totalDelay
-		if c.minDelay < final_result.minDelay:
-			final_result.minDelay = c.minDelay
-		if c.maxDelay > final_result.maxDelay:
-			final_result.maxDelay = c.maxDelay
 
-	if final_result.pkts != 0:
-		print("pkts: {}, delay min/max/avg: {}/{}/{}".format(final_result.pkts, final_result.minDelay, final_result.maxDelay,
-			final_result.totalDelay / final_result.pkts))
-	
+	print("Shutting down...")
+
+	# cleanup child process
+	for v in processes:
+		os.kill(v.pid, signal.SIGTERM)
+
 	for v in processes:
 		v.join()
