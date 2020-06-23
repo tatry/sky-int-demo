@@ -8,8 +8,10 @@ function install_sky_int_demo
 
 function init_sky_int_demo
 {
-	# empty
-	:
+	if is_service_enabled sky-int-demo-grafana; then
+		# configure the Influx DB
+		influx -execute "CREATE DATABASE ${SKY_INT_DEMO_INFLUX_DATABASE}"
+	fi
 }
 
 function configure_sky_int_demo
@@ -23,7 +25,7 @@ if [[ "$1" == "stack" && "$2" == "pre-install" ]]; then
 	install_package python3-influxdb
 	if is_service_enabled sky-int-demo-grafana; then
 		# InfluxDB
-		install_package influxdb
+		install_package influxdb influxdb-client
 		# Grafana
 		if ! is_package_installed grafana; then
 			wget -q "https://dl.grafana.com/oss/release/grafana_""${SKY_INT_DEMO_GRAFANA_VER}"".deb"
@@ -60,7 +62,11 @@ if [[ "$1" == "unstack" ]]; then
 		lsof -ti udp:9500 | xargs kill 
 	fi
 
-	sudo /bin/systemctl stop grafana-server.service
+	if is_service_enabled sky-int-demo-grafana; then
+		influx -execute "DROP DATABASE ${SKY_INT_DEMO_INFLUX_DATABASE}"
+
+		sudo /bin/systemctl stop grafana-server.service
+	fi
 fi
 
 if [[ "$1" == "clean" ]]; then

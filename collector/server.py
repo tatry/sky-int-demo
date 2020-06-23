@@ -7,6 +7,9 @@ import signal
 import sys
 import os
 import time
+import copy
+
+import influxdb
 
 import parser
 
@@ -38,7 +41,7 @@ class ServerState:
 			
 			self.flows[flow][4] += totalLatency
 		else:
-			self.flows[flow] = [bytes, packets, totalLatency, totalLatency, totalLatency] # pkts, bytes, min/max/total latency
+			self.flows[flow] = [bytes, packets, minLatency, maxLatency, totalLatency] # pkts, bytes, min/max/total latency
 	
 	def add(self, additional):
 		# update flows
@@ -100,8 +103,7 @@ def server(result):
 				# dictionaries must be copied to be sure that they are correctly serialized, because
 				# serialization is performed by concurent thread
 				# see https://stackoverflow.com/questions/28593103 
-				tmp = ServerState()
-				tmp.flows = state.flows.copy()
+				tmp = copy.copy(state)
 				result.put_nowait(tmp)
 				state.clear()
 
@@ -124,6 +126,9 @@ def stopManager(signum, frame):
 if __name__ == '__main__':
 	signal.signal(signal.SIGINT, stopManager)
 	signal.signal(signal.SIGTERM, stopManager)
+
+	# TODO: connect data from cmd line
+	db = influxdb.InfluxDBClient(host='10.0.4.11', port=8086)
 
 	max_processes = 2 #len(os.sched_getaffinity(0))
 	processes = list()
@@ -149,7 +154,7 @@ if __name__ == '__main__':
 	try:
 		while True:
 			# wait a while
-			time.sleep(1)
+			time.sleep(5)
 
 			for v in processes:
 				os.kill(v.pid, signal.SIGINT)
@@ -159,16 +164,35 @@ if __name__ == '__main__':
 				c = v.get()
 				final_result.add(c)
 			
-			# TODO: send final_result to the InfluxDB
+			if len(final_result.flows) == 0:
+				continue
+
+			print(final_result.flows)
+			# prepare final_result to the InfluxDB
+			# spcace, coma and equal sign need to be escaped with \
+			data = []
+			for k, v in final_result.flows.items():
+				data.append("flows,flow=\"{flow}\" bytes={bytes},packets={pkts},minLantency={minLat},maxLantency={maxLat},avgLatency={avgLat}"
+					.format(flow=k.replace(" ", "\ "),
+							bytes=v[0],
+							pkts=v[1],
+							minLat=v[2],
+							maxLat=v[3],
+							avgLat=(v[4]/v[1])))
+			
+			# and finally send data to InfluxDB
+			#print(data)
+			db.write(data, {'db': 'int'}, protocol='line')
 		
 	except KeyboardInterrupt:
 		pass
 
-	print("Shutting down...")
+	finally:
+		print("Shutting down...")
 
-	# cleanup child process
-	for v in processes:
-		os.kill(v.pid, signal.SIGTERM)
+		# cleanup child process
+		for v in processes:
+			os.kill(v.pid, signal.SIGTERM)
 
-	for v in processes:
-		v.join()
+		for v in processes:
+			v.join()
