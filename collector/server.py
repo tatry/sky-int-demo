@@ -41,12 +41,30 @@ class ServerState:
 			
 			self.flows[flow][4] += totalLatency
 		else:
-			self.flows[flow] = [bytes, packets, minLatency, maxLatency, totalLatency] # pkts, bytes, min/max/total latency
+			self.flows[flow] = [bytes, packets, minLatency, maxLatency, totalLatency]
 	
+	def update_switch(self, switch_key, switch_id, in_port, out_port, flow, bytes, packets, minLatency, maxLatency, latency):
+		if switch_key in self.switches:
+			self.switches[switch_key][4] += bytes
+			self.switches[switch_key][5] += packets
+
+			if self.switches[switch_key][6] > minLatency:
+				self.switches[switch_key][6] = minLatency
+			
+			if self.self.switches[switch_key][7] < maxLatency:
+				self.switches[switch_key][7] = maxLatency
+			
+			self.switches[switch_key][8] += latency
+		else:
+			self.switches[switch_key] = [switch_id, in_port, out_port, flow, bytes, packets, minLatency, maxLatency, latency]
+
 	def add(self, additional):
 		# update flows
 		for k, v in additional.flows.items():
-			self.update_flow(k, v[0], v[1], v[2], v[3], v[4])
+			self.update_flow(k, *v)
+		#update switches
+		for k, v in additional.switches.items():
+			self.update_switch(k, *v)
 
 state = ServerState()
 
@@ -97,6 +115,12 @@ def server(result):
 				for i in hops_metadata:
 					totalLatency += i["latency"]
 				state.update_flow(flow, packet_totalLen, 1, totalLatency, totalLatency, totalLatency)
+
+				for i in hops_metadata:
+					key = "{} {} {} {}".format(i["switch_ID"], i["ingress_port"], i["egress_port"], flow)
+					latency = i["latency"]
+					state.update_switch(key, i["switch_ID"], i["ingress_port"], i["egress_port"], flow, packet_totalLen, 1,
+										latency, latency, latency)
 			
 			except SendMetadata:
 				# one packet may be incompletly added, so the more packets, the error is smaller
@@ -151,6 +175,7 @@ if __name__ == '__main__':
 
 	print("Startup completed")
 	
+	start_measure = time.monotonic()
 	try:
 		while True:
 			# wait a while
@@ -158,6 +183,8 @@ if __name__ == '__main__':
 
 			for v in processes:
 				os.kill(v.pid, signal.SIGINT)
+			measure_time = time.monotonic() - start_measure
+			start_measure = time.monotonic()
 			
 			final_result = ServerState()
 			for v in results:
@@ -168,18 +195,30 @@ if __name__ == '__main__':
 				continue
 
 			print(final_result.flows)
+			print("measure time: {} s".format(measure_time))
 			# prepare final_result to the InfluxDB
 			# spcace, coma and equal sign need to be escaped with \
 			data = []
 			for k, v in final_result.flows.items():
-				data.append("flows,flow=\"{flow}\" bytes={bytes},packets={pkts},minLantency={minLat},maxLantency={maxLat},avgLatency={avgLat}"
+				data.append("flows,flow={flow} bytes={bytes},packets={pkts},minLantency={minLat},maxLantency={maxLat},avgLatency={avgLat}"
 					.format(flow=k.replace(" ", "\ "),
-							bytes=v[0],
-							pkts=v[1],
+							bytes=(v[0]/measure_time),
+							pkts=(v[1]/measure_time),
 							minLat=v[2],
 							maxLat=v[3],
 							avgLat=(v[4]/v[1])))
 			
+			for k, v in final_result.switches.items():
+				data.append("switches,switchID={switchID},input={input},output={output},flow={flow} bytes={bytes},packets={pkts},minLantency={minLat},maxLantency={maxLat},avgLatency={avgLat}"
+					.format(switchID=v[0],
+							input=v[1],
+							output=v[2],
+							flow=v[3].replace(" ", "\ "),
+							bytes=(v[4]/measure_time),
+							pkts=(v[5]/measure_time),
+							minLat=v[6],
+							maxLat=v[7],
+							avgLat=(v[8]/v[5])))
 			# and finally send data to InfluxDB
 			#print(data)
 			db.write(data, {'db': 'int'}, protocol='line')
