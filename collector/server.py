@@ -51,13 +51,31 @@ class ServerState:
 			if self.switches[switch_key][6] > minLatency:
 				self.switches[switch_key][6] = minLatency
 			
-			if self.self.switches[switch_key][7] < maxLatency:
+			if self.switches[switch_key][7] < maxLatency:
 				self.switches[switch_key][7] = maxLatency
 			
 			self.switches[switch_key][8] += latency
 		else:
 			self.switches[switch_key] = [switch_id, in_port, out_port, flow, bytes, packets, minLatency, maxLatency, latency]
 
+	def update_path(self, path_key, trace_key, bytes, packets, minLatency, maxLatency, latency, src, dst):
+		if path_key in self.paths:
+			if trace_key in self.paths[path_key]:
+				self.paths[path_key][trace_key][0] += bytes
+				self.paths[path_key][trace_key][1] += packets
+
+				if self.paths[path_key][trace_key][2] > minLatency:
+					self.paths[path_key][trace_key][2] = minLatency
+				
+				if self.paths[path_key][trace_key][3] < maxLatency:
+					self.paths[path_key][trace_key][3] = maxLatency
+				
+				self.paths[path_key][trace_key][4] += latency
+			else:
+				self.paths[path_key][trace_key] = [bytes, packets, minLatency, maxLatency, latency, src, dst]
+		else:
+			self.paths[path_key] = {trace_key : [bytes, packets, minLatency, maxLatency, latency, src, dst]}
+		
 	def add(self, additional):
 		# update flows
 		for k, v in additional.flows.items():
@@ -65,6 +83,10 @@ class ServerState:
 		#update switches
 		for k, v in additional.switches.items():
 			self.update_switch(k, *v)
+		# update paths
+		for p, d in additional.paths.items():
+			for t, v in d.items():
+				self.update_path(p, t, *v)
 
 state = ServerState()
 
@@ -107,10 +129,6 @@ def server(result):
 
 				flow = "{} {} {} {} {}".format(transport_protocol, srcIP, srcPort, dstIP, dstPort)
 
-				#print("flow: {}:".format(flow))
-				#print(" bytes: {}".format(packet_totalLen))
-				#for i in hops_metadata:
-				#	print(" {}".format(i))
 				totalLatency = 0
 				for i in hops_metadata:
 					totalLatency += i["latency"]
@@ -121,6 +139,13 @@ def server(result):
 					latency = i["latency"]
 					state.update_switch(key, i["switch_ID"], i["ingress_port"], i["egress_port"], flow, packet_totalLen, 1,
 										latency, latency, latency)
+				
+				path = "{} {}".format(srcIP, dstIP)
+				trace = ""
+				for i in reversed(hops_metadata):
+					trace += " {}".format(i["switch_ID"])
+				trace = trace[1:]
+				state.update_path(path, trace, packet_totalLen, 1, latency, latency, latency, srcIP, dstIP)
 			
 			except SendMetadata:
 				# one packet may be incompletly added, so the more packets, the error is smaller
@@ -179,7 +204,7 @@ if __name__ == '__main__':
 	try:
 		while True:
 			# wait a while
-			time.sleep(5)
+			time.sleep(1)
 
 			for v in processes:
 				os.kill(v.pid, signal.SIGINT)
@@ -194,8 +219,7 @@ if __name__ == '__main__':
 			if len(final_result.flows) == 0:
 				continue
 
-			print(final_result.flows)
-			print("measure time: {} s".format(measure_time))
+			#print("measure time: {} s".format(measure_time))
 			# prepare final_result to the InfluxDB
 			# spcace, coma and equal sign need to be escaped with \
 			data = []
@@ -219,8 +243,21 @@ if __name__ == '__main__':
 							minLat=v[6],
 							maxLat=v[7],
 							avgLat=(v[8]/v[5])))
+			
+			for path, d in final_result.paths.items():
+				for trace, v in d.items():
+					data.append("paths,path={path},src={src},dst={dst} trace=\"{trace}\",bytes={bytes},packets={pkts},minLantency={minLat},maxLantency={maxLat},avgLatency={avgLat}"
+						.format(path=path.replace(" ", "\ "),
+								src=v[5],
+								dst=v[6],
+								trace=trace,
+								bytes=(v[0]/measure_time),
+								pkts=(v[1]/measure_time),
+								minLat=v[2],
+								maxLat=v[3],
+								avgLat=(v[4]/v[1])))
+
 			# and finally send data to InfluxDB
-			#print(data)
 			db.write(data, {'db': 'int'}, protocol='line')
 		
 	except KeyboardInterrupt:
