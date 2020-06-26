@@ -8,6 +8,7 @@ import sys
 import os
 import time
 import copy
+import struct
 
 import influxdb
 
@@ -27,6 +28,7 @@ class ServerState:
 		self.flows = dict()
 		self.switches = dict()
 		self.paths = dict()
+		self.SYNrate = dict()
 	
 	def update_flow(self, flow, bytes, packets, minLatency, maxLatency, totalLatency):
 		if flow in self.flows:
@@ -75,7 +77,13 @@ class ServerState:
 				self.paths[path_key][trace_key] = [bytes, packets, minLatency, maxLatency, latency, src, dst]
 		else:
 			self.paths[path_key] = {trace_key : [bytes, packets, minLatency, maxLatency, latency, src, dst]}
-		
+	
+	def update_syn_rate(self, dstIP, packets):
+		if dstIP in self.SYNrate:
+			self.SYNrate[dstIP] += packets
+		else:
+			self.SYNrate[dstIP] = packets
+	
 	def add(self, additional):
 		# update flows
 		for k, v in additional.flows.items():
@@ -87,6 +95,9 @@ class ServerState:
 		for p, d in additional.paths.items():
 			for t, v in d.items():
 				self.update_path(p, t, *v)
+		# other metrics
+		for k, v in additional.SYNrate.items():
+			self.update_syn_rate(k, v)
 
 state = ServerState()
 
@@ -122,7 +133,7 @@ def server(result):
 				#print('received {} bytes from {}'.format(len(data), addr))
 			
 				# decode packet
-				hops_metadata, transport_protocol, srcIP, dstIP, srcPort, dstPort, packet_totalLen = parser.parse_int_report(data)
+				hops_metadata, transport_protocol, srcIP, dstIP, srcPort, dstPort, packet_totalLen, flags = parser.parse_int_report(data)
 
 				if len(hops_metadata) == 0:
 					continue
@@ -146,6 +157,15 @@ def server(result):
 					trace += " {}".format(i["switch_ID"])
 				trace = trace[1:]
 				state.update_path(path, trace, packet_totalLen, 1, latency, latency, latency, srcIP, dstIP)
+
+				if flags is not None:
+					flag_syn = flags & 0x2
+					flag_ack = flags & 0x10
+					if flag_syn != 0:
+						if flag_ack != 0:
+							pass
+						else:
+							state.update_syn_rate(dstIP, 1)
 			
 			except SendMetadata:
 				# one packet may be incompletly added, so the more packets, the error is smaller
@@ -257,6 +277,11 @@ if __name__ == '__main__':
 								maxLat=v[3],
 								avgLat=(v[4]/v[1])))
 
+			for k, v in final_result.SYNrate.items():
+				data.append("syn_rate,dstIP={dstIP} packets={pkts}"
+					.format(dstIP=k,
+							pkts=(v/measure_time)))
+			
 			# and finally send data to InfluxDB
 			db.write(data, {'db': 'int'}, protocol='line')
 		

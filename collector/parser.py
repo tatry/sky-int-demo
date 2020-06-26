@@ -17,6 +17,9 @@ def get_ip_version(data):
 def get_transport_port(data):
 	return struct.unpack('!H', data)[0]
 
+def get_tcp_flags(data):
+	return struct.unpack('!B', get_header_data(data, 13, 1))[0]
+
 def get_int_per_hop_metadata_size(data):
 	return (struct.unpack('!B', get_header_data(data, 2, 1))[0] & 0x1F)
 
@@ -107,8 +110,10 @@ def parse_int_report(data):
 	dstPort = get_transport_port(get_header_data(transport_header, 2, 2))
 
 	transport_protocol = ''
+	TCPflags = None
 	if len(transport_header) == 20:
 		transport_protocol = 'tcp'
+		TCPflags = get_tcp_flags(transport_header)
 	else:
 		transport_protocol = 'udp'
 
@@ -164,5 +169,5 @@ def parse_int_report(data):
 
 		hops_metadata.append(metadata)
 	
-	return hops_metadata, transport_protocol, srcIP, dstIP, srcPort, dstPort, packet_totalLen
+	return hops_metadata, transport_protocol, srcIP, dstIP, srcPort, dstPort, packet_totalLen, TCPflags
 
