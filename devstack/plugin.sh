@@ -1,9 +1,24 @@
 #!/bin/bash
 
+# ovs installation from https://opendev.org/x/networking-ovs-dpdk
+# https://opendev.org/x/networking-ovs-dpdk/src/branch/master/devstack/plugin.sh
+# https://opendev.org/x/networking-ovs-dpdk/src/branch/master/devstack/libs/ovs-dpdk
+
 function install_sky_int_demo
 {
-	# empty
-	:
+	if $(dpkg -s openvswitch-switch 2>&1 | grep installed | grep -v -i "not installed"  &> /dev/null ); then
+		stop_service openvswitch-switch
+		uninstall_package openvswitch-switch openvswitch-datapath-dkms openvswitch-common
+	fi
+	install_package autoconf libtool libfuse-dev screen
+
+	cd ${OVS_DIR}
+	./boot.sh
+	./configure --with-dbdir=$OVS_DB_CONF_DIR --disable-bpf-verifier CFLAGS='-O3 -march=native -fPIC'
+	make -j $(nproc) CFLAGS='-O3 -march=native -fPIC' $ADDFLAGS
+	sudo make install
+
+	sudo /usr/local/share/openvswitch/scripts/ovs-ctl start
 }
 
 function init_sky_int_demo
@@ -38,6 +53,11 @@ if [[ "$1" == "stack" && "$2" == "pre-install" ]]; then
 		sudo /bin/systemctl start grafana-server.service
 	fi
 
+	# OvS
+	sudo apt-get install -y linux-headers-$(uname -r) fdutils libxtst6 libnuma-dev automake libcap-ng-dev libelf-dev
+	git_clone_or_update ${OVS_GIT_REPO} ${OVS_DIR} ${OVS_GIT_TAG}
+
+
 elif [[ "$1" == "stack" && "$2" == "install" ]]; then
 	# Perform installation of service source
 	echo_summary "Installing sky-int-demo"
@@ -67,10 +87,14 @@ if [[ "$1" == "unstack" ]]; then
 
 		sudo /bin/systemctl stop grafana-server.service
 	fi
+	sudo /usr/local/share/openvswitch/scripts/ovs-ctl stop
 fi
 
 if [[ "$1" == "clean" ]]; then
 	# Remove state and transient data
 	# Remember clean.sh first calls unstack.sh
 	sudo apt-get purge grafana influxdb
+	
+	cd ${OVS_DIR}
+	sudo make uninstall
 fi
