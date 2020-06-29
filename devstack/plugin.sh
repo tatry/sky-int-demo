@@ -6,23 +6,23 @@
 
 function install_sky_int_demo
 {
-	if $(dpkg -s openvswitch-switch 2>&1 | grep installed | grep -v -i "not installed"  &> /dev/null ); then
-		stop_service openvswitch-switch
-		uninstall_package openvswitch-switch openvswitch-datapath-dkms openvswitch-common
-	fi
+	#if $(dpkg -s openvswitch-switch 2>&1 | grep installed | grep -v -i "not installed"  &> /dev/null ); then
+	#	stop_service openvswitch-switch
+	#	uninstall_package openvswitch-switch openvswitch-datapath-dkms openvswitch-common
+	#fi
 	install_package autoconf libtool libfuse-dev screen
 
-	cd ${OVS_DIR}
-	./boot.sh
-	./configure --with-dbdir=$OVS_DB_CONF_DIR --disable-bpf-verifier CFLAGS='-O3 -march=native -fPIC'
-	make -j $(nproc) CFLAGS='-O3 -march=native -fPIC' $ADDFLAGS
-	sudo make install
+	#cd ${OVS_DIR}
+	#./boot.sh
+	#./configure --with-dbdir=$OVS_DB_CONF_DIR --disable-bpf-verifier CFLAGS='-O3 -march=native -fPIC'
+	#make -j $(nproc) CFLAGS='-O3 -march=native -fPIC' $ADDFLAGS
+	#sudo make install
 
-	sudo /usr/local/share/openvswitch/scripts/ovs-ctl start
+	#sudo /usr/local/share/openvswitch/scripts/ovs-ctl start
 
-	sudo ovs-vsctl --no-wait set Bridge br-tun datapath_type=${OVS_DATAPATH_TYPE}
-	sudo ovs-vsctl --no-wait set Bridge br-int datapath_type=${OVS_DATAPATH_TYPE}
-	sudo ovs-vsctl --no-wait set Bridge br-ex datapath_type=${OVS_DATAPATH_TYPE}
+	#sudo ovs-vsctl --no-wait set Bridge br-tun datapath_type=${OVS_DATAPATH_TYPE}
+	#sudo ovs-vsctl --no-wait set Bridge br-int datapath_type=${OVS_DATAPATH_TYPE}
+	#sudo ovs-vsctl --no-wait set Bridge br-ex datapath_type=${OVS_DATAPATH_TYPE}
 }
 
 function init_sky_int_demo
@@ -59,9 +59,9 @@ if [[ "$1" == "stack" && "$2" == "pre-install" ]]; then
 
 	# OvS
 	sudo apt-get install -y linux-headers-$(uname -r) fdutils libxtst6 libnuma-dev automake libcap-ng-dev libelf-dev
-	git clone ${OVS_GIT_REPO} ${OVS_DIR}
-	cd ${OVS_DIR}
-	git checkout -f ${OVS_GIT_TAG}
+	#git clone ${OVS_GIT_REPO} ${OVS_DIR}
+	#cd ${OVS_DIR}
+	#git checkout -f ${OVS_GIT_TAG}
 
 
 elif [[ "$1" == "stack" && "$2" == "install" ]]; then
@@ -93,7 +93,7 @@ if [[ "$1" == "unstack" ]]; then
 
 		sudo /bin/systemctl stop grafana-server.service
 	fi
-	sudo /usr/local/share/openvswitch/scripts/ovs-ctl stop
+	#sudo /usr/local/share/openvswitch/scripts/ovs-ctl stop
 fi
 
 if [[ "$1" == "clean" ]]; then
@@ -101,6 +101,6 @@ if [[ "$1" == "clean" ]]; then
 	# Remember clean.sh first calls unstack.sh
 	sudo apt-get purge grafana influxdb
 
-	cd ${OVS_DIR}
-	sudo make uninstall
+	#cd ${OVS_DIR}
+	#sudo make uninstall
 fi
