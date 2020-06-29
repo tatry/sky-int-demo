@@ -31,11 +31,11 @@ if [[ "$1" == "stack" && "$2" == "pre-install" ]]; then
 			wget -q "https://dl.grafana.com/oss/release/grafana_""${SKY_INT_DEMO_GRAFANA_VER}"".deb"
 			install_package ./"grafana_""${SKY_INT_DEMO_GRAFANA_VER}"".deb"
 			rm "./grafana_""${SKY_INT_DEMO_GRAFANA_VER}"".deb"
-			
-			sudo /bin/systemctl daemon-reload
-			sudo /bin/systemctl enable grafana-server.service
-			sudo /bin/systemctl start grafana-server.service
 		fi
+			
+		sudo /bin/systemctl daemon-reload
+		sudo /bin/systemctl enable grafana-server.service
+		sudo /bin/systemctl start grafana-server.service
 	fi
 
 elif [[ "$1" == "stack" && "$2" == "install" ]]; then
