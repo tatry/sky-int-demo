@@ -59,7 +59,9 @@ if [[ "$1" == "stack" && "$2" == "pre-install" ]]; then
 
 	# OvS
 	sudo apt-get install -y linux-headers-$(uname -r) fdutils libxtst6 libnuma-dev automake libcap-ng-dev libelf-dev
-	git_clone_or_update ${OVS_GIT_REPO} ${OVS_DIR} ${OVS_GIT_TAG}
+	git clone ${OVS_GIT_REPO} ${OVS_DIR}
+	cd ${OVS_DIR}
+	git checkout -f ${OVS_GIT_TAG}
 
 
 elif [[ "$1" == "stack" && "$2" == "install" ]]; then
