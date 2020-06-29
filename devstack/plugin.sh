@@ -14,7 +14,7 @@ function install_sky_int_demo
 
 	#cd ${OVS_DIR}
 	#./boot.sh
-	#./configure --with-dbdir=$OVS_DB_CONF_DIR --disable-bpf-verifier CFLAGS='-O3 -march=native -fPIC'
+	#./configure --with-dbdir=$OVS_DB_CONF_DIR --prefix=/usr --disable-bpf-verifier CFLAGS='-O3 -march=native -fPIC'
 	#make -j $(nproc) CFLAGS='-O3 -march=native -fPIC' $ADDFLAGS
 	#sudo make install
 
