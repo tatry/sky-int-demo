@@ -19,6 +19,10 @@ function install_sky_int_demo
 	sudo make install
 
 	sudo /usr/local/share/openvswitch/scripts/ovs-ctl start
+
+	sudo ovs-vsctl --no-wait set Bridge br-tun datapath_type=${OVS_DATAPATH_TYPE}
+	sudo ovs-vsctl --no-wait set Bridge br-int datapath_type=${OVS_DATAPATH_TYPE}
+	sudo ovs-vsctl --no-wait set Bridge br-ex datapath_type=${OVS_DATAPATH_TYPE}
 }
 
 function init_sky_int_demo
@@ -94,7 +98,7 @@ if [[ "$1" == "clean" ]]; then
 	# Remove state and transient data
 	# Remember clean.sh first calls unstack.sh
 	sudo apt-get purge grafana influxdb
-	
+
 	cd ${OVS_DIR}
 	sudo make uninstall
 fi
